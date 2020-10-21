@@ -12,12 +12,12 @@ def calcLossMAPE(_pred, _y):
 def calcLossMSE(_pred, _y):
   return F.mse_loss(_pred, _y)
 
-def clacLossMASE(_pred, _y):
+def calcLossMASE(_pred, _y):
   count_ = _pred.shape[0]
   diff_ = torch.abs(_y[1:] - _y[:-1]).sum() / (count_-1)
   errors_ = torch.abs(_y - _pred)
   return errors_.mean() / diff_
 
-def clacLossPA(_pred, _y):
+def calcLossPA(_pred, _y):
   return torch.mean(1 - (torch.abs(_pred - _y) / (_pred + _y)))
 

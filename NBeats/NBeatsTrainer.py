@@ -12,10 +12,10 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader, TensorDataset
 
 from utils.operators import NAME_LOSS_MAPE, NAME_LOSS_MSE, NAME_LOSS_MASE, NAME_LOSS_PA
-from NBEATS import NBeatsNet
+from NBeats.NBEATS import NBeatsNet
 import definitions
 from utils import operators
-import NBeatsDatasetMaker
+from NBeats import NBeatsDatasetMaker
 
 CHECKPOINT_NAME_NET_STATE = 'dict_net_state'
 CHECKPOINT_NAME_OPTIMZER_STATE = 'dict_optimizer_state'
@@ -122,7 +122,7 @@ class NBeatsTrainer:
       # _optimizer.load_state_dict(__checkpoints[CHECKPOINT_NAME_OPTIMZER_STATE])
       # __epoch_step = __checkpoints[CHECKPOINT_NAME_STEP]
       __epoch_step = self.loadFromFile(__model_file_path, _net, _optimizer)
-      print(f'load checkpoint from {__model_file_path}.')
+      # print(f'load checkpoint from {__model_file_path}.')
       return __epoch_step
     return 0
   
@@ -154,7 +154,7 @@ class NBeatsTrainer:
     for __ in range(__cnt_trend_stack):
       __list_stack.append(NBeatsNet.TREND_BLOCK)
       __list_hidden_layer_units.append(256)
-      __list_block_cnt.append(3)
+      __list_block_cnt.append(4)
       __list_thetas_dims.append(20)
     for __ in range(__cnt_generic_stack):
       __list_stack.append(NBeatsNet.GENERIC_BLOCK)
@@ -171,6 +171,7 @@ class NBeatsTrainer:
       share_weights_in_stack=False,
       )
     __optimizer = optim.Adam(__net.parameters())
+    __net.to(self.device)
     return __net, __optimizer
   
   def evaluation(self, _x, _y, _net, _optimizer, _name_backcast=NAME_BACKCAST_3H, _name_epoch=NAME_EPOCH_5K, _name_loss=NAME_LOSS_MAPE, _print_plot=False):
@@ -209,7 +210,9 @@ class NBeatsTrainer:
     __list_epoch = DICT_ENSEMBLE[_name_ensemble_set][NAME_ENSEMBLE_EPOCH]
     __list_loss = DICT_ENSEMBLE[_name_ensemble_set][NAME_ENSEMBLE_LOSS]
     __list_backcast = DICT_ENSEMBLE[_name_ensemble_set][NAME_ENSEMBLE_BACKCAST]
-    
+    _data_train = _data_train.to(self.device)
+    _data_eval = _data_eval.to(self.device)
+
     for __name_epoch in __list_epoch:  
       for __name_backcast in __list_backcast:
         __len_backcast = _len_forecast * DICT_BACKCAST[__name_backcast]        

@@ -6,9 +6,9 @@ NAME_DATA_TYPE_3D = '3d'
 NAME_DATA_TYPE_2D = '2d'
 
 def __checkDataShape(_data):
-  if (len(np.shape(_data).shape)==3) & (np.shape(_data)[2] == 1):
+  if (len(np.shape(_data))==2):
     return NAME_DATA_TYPE_3D
-  elif (len(np.shape(_data).shape)==2) & (np.shape(_data)[1] == 1):
+  elif (len(np.shape(_data))==1):
     return NAME_DATA_TYPE_2D
   else:
     raise Exception('Array should be of [n x 1] or [m x n x 1] shape')
@@ -16,8 +16,10 @@ def __checkDataShape(_data):
 def __makeTrainDataset(_data, _len_backcast, _len_forecast, _normalize):
   __list_x = []
   __list_y = []
-  _data = np.array(np.reshpae(_data, [-1,]), dtype='float')
+  _data = np.array(np.reshape(_data, [-1,]), dtype='float')
   _data = _data[~np.isnan(_data)]
+  if len(_data) == 0:
+    return __list_x, __list_y, 0.0001
   __num_max = np.max(_data)
   if _normalize:
     _data = _data / __num_max

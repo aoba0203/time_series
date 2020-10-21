@@ -7,8 +7,8 @@ def makeDirs(_path):
   return _path
 
 def getProjectRootPath():
-  root_path = Path(os.path.abspath('definitions.py'))
-  return root_path
+  root_path = Path(os.path.abspath('definitions.py'))  
+  return root_path.parents[0]
 
 def getTrainedModelPath(_model_name, _prefix):
   root_path = Path(getProjectRootPath())
