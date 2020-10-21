@@ -12,6 +12,7 @@ def getProjectRootPath():
 
 def getTrainedModelPath(_model_name, _prefix):
   root_path = Path(getProjectRootPath())
-  model_path = os.path.join(root_path, _model_name)
+  trained_path = os.path.join(root_path, 'trained_models')
+  model_path = os.path.join(trained_path, _model_name)
   prefix_path = os.path.join(model_path, _prefix)
   return makeDirs(prefix_path)
