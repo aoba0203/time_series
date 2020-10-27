@@ -232,14 +232,24 @@ class NBeatsTrainer:
               break
           self.evaluation(__eval_x_t, __eval_y_t, __net, __optimizer, __name_backcast, __name_epoch, __name_loss)
 
-  def predict(self, _x, _len_forecast, _name_ensemble_set=NAME_ENSEMBLE_SET_SMALL, _choice_function=np.median):    
+  def predict_ensemble(self, _x, _len_forecast, _name_ensemble_set=NAME_ENSEMBLE_SET_SMALL, _choice_function=np.median):    
     __path_model = definitions.getTrainedModelPath(self.tag, _name_ensemble_set)
     __list_predict = []
-    for __path_model in glob.glob(os.path.join(__path_model, '*.th')):
-      __len_backcast = _len_forecast * DICT_BACKCAST[os.path.basename(__path_model).split('_')[1]]
-      __net, __optimizer = self.getNet(_len_forecast, __len_backcast)
-      __backcast, __forecast = __net(_x)
+    for __path_model in glob.glob(__path_model + '*'):
+      __name_iterate = os.path.basename(__path_model).split('_')[1]
+      __name_backcast = os.path.basename(__path_model).split('_')[2]
+      __name_loss = os.path.basename(__path_model).split('_')[3]
+      __forecast = self.predict(_x, _len_forecast, __name_backcast, __name_iterate, __name_loss)
       __list_predict.append(__forecast)
     return _choice_function(__list_predict, axis=0)
 
+  def predict(self, _x, _len_forecast, _name_backcast=NAME_BACKCAST_3H, _name_epoch=NAME_EPOCH_5K, _name_loss=NAME_LOSS_MAPE):
+    with torch.no_grad():
+      __x_t = torch.tensor(_x, dtype=torch.float).to(self.device)
+      __len_backcast = _len_forecast * DICT_BACKCAST[_name_backcast]
+      __net, __optimizer = self.getNet(_len_forecast, __len_backcast)      
+      __train_epoch = self.load(__net, __optimizer, _name_backcast, _name_epoch, _name_loss)
+      __net.eval()
+      __backcast, __forecast = __net(__x_t)
+      return __forecast
     
