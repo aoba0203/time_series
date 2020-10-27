@@ -5,6 +5,7 @@ import pandas as pd
 import os
 import matplotlib.pyplot as plt
 import glob
+from multiprocessing import Process, Queue
 
 import torch
 from torch import optim
@@ -88,6 +89,7 @@ class NBeatsTrainer:
     self.prefix = _prefix
     self.model_path = definitions.getTrainedModelPath(self.tag, self.prefix)
     self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    self.queue_job = Queue()
 
   def makePlotScatter(*args, **kwargs):
     plt.plot(*args, **kwargs)
@@ -137,7 +139,7 @@ class NBeatsTrainer:
     }, __model_file_path)
   
   def getModelName(self, _name_backcast, _name_epoch, _name_loss):
-    return self.prefix + '_' + _name_epoch + '_' + _name_backcast + '_' + _name_loss + '_' + str(self.device) + '.ckpt'
+    return self.prefix + '_' + _name_backcast + '_' + _name_epoch + '_' + _name_loss + '_' + str(self.device)
   
   def getNet(self, _len_forecast, _len_backcast):    
     __cnt_seasonality_stack = 1
@@ -176,61 +178,97 @@ class NBeatsTrainer:
     return __net, __optimizer
   
   def evaluation(self, _x, _y, _net, _optimizer, _name_backcast=NAME_BACKCAST_3H, _name_epoch=NAME_EPOCH_5K, _name_loss=NAME_LOSS_MAPE, _print_plot=False):
-    with torch.no_grad():
-      __model_name = self.getModelName(_name_backcast, _name_epoch, _name_loss)
-      __loss_function = DICT_LOSS_FUNCTION[_name_loss]
-      __train_epoch = self.load(_net, _optimizer, _name_backcast, _name_epoch, _name_loss)
-      _net.eval()
-      __backcast, __forecast = _net(_x)
-      __loss = __loss_function(__forecast, _y)
-      if _print_plot:
-        self.printPlot(_x, _y, __forecast)
-      print(f'Evaluation - Name = {str(__model_name)}, loss = {__loss.item():.6f}')
+    __model_name = self.getModelName(_name_backcast, _name_epoch, _name_loss)
+    __loss_function = DICT_LOSS_FUNCTION[_name_loss]
+    __train_epoch = self.load(_net, _optimizer, _name_backcast, _name_epoch, _name_loss)
+    _net.eval()
+    __backcast, __forecast = _net(_x)
+    __loss = __loss_function(__forecast, _y)
+    if _print_plot:
+      self.printPlot(_x, _y, __forecast)
+    print(f'Evaluation - Name = {str(__model_name)}, loss = {__loss.item():.6f}')
 
-  def train_epoch(self, _epoch, _x, _y, _net, _optimizer, _name_backcast=NAME_BACKCAST_3H, _name_epoch=NAME_EPOCH_5K, _name_loss=NAME_LOSS_MAPE, _batch_size=256, _print_epoch=100, _shuffle=True, _save=True):
-    __train_step = self.load(_net, _optimizer, _name_backcast, _name_epoch, _name_loss)
+  def trainEpoch(self, _epoch, _x, _y, _net, _optimizer, _batch_size, _name_backcast=NAME_BACKCAST_3H, _name_epoch=NAME_EPOCH_5K, _name_loss=NAME_LOSS_MAPE, _print_epoch=100, _shuffle=True, _save=True):
+    __train_epoch = self.load(_net, _optimizer, _name_backcast, _name_epoch, _name_loss)
     __loss_function = DICT_LOSS_FUNCTION[_name_loss]
     __datasets = TensorDataset(_x, _y)
-    __data_loader = DataLoader(__datasets, batch_size=_batch_size, shuffle=_shuffle)    
-    __loss = torch.tensor(0.).to(self.device)
+    __data_loader = DataLoader(__datasets, batch_size=_batch_size, shuffle=_shuffle)
     _net.train()
+    __loss = torch.tensor(0.).to(self.device)
     for __x, __y in __data_loader:
       _optimizer.zero_grad()
       __backcast, __forecast = _net(__x)
       __loss = __loss_function(__forecast, __y)
       __loss.backward()
       _optimizer.step()
-      __train_step += 1      
-      # if __train_step % _print_epoch == 0:
-      #   print(f'Train - Step = {str(__train_step).zfill(6)}, loss({_name_loss}) = {__loss.item():.6f}')
-      del __loss, __forecast, __x, __y
-    if _save:
+    __train_epoch += 1
+    if (_epoch % 100 == 0) & (_save):
       with torch.no_grad():
-        self.save(_net, _optimizer, __train_step, _name_backcast, _name_epoch, _name_loss)        
-    return __train_step
+        self.save(_net, _optimizer, _epoch, _name_backcast, _name_epoch, _name_loss)
+    if (_epoch > 0) & (_epoch % _print_epoch == 0):
+      print(f'Train - Step = {str(_epoch).zfill(6)}, loss = {__loss.item():.6f}')
 
-  def train(self, _data_train, _data_eval, _list_data_name, _len_forecast, _batch_size=1024, _name_ensemble_set=NAME_ENSEMBLE_SET_SMALL):
-    # self.model_path = definitions.getTrainedModelPath(self.tag, _name_ensemble_set)
+  def trainByjobQueue(self, _queue):
+    __job = _queue.get()
+    print('trainByjobQueue: ', __job)
+    __name_epoch = __job[0]
+    __name_backcast = __job[1]
+    __name_loss = __job[2]
+    __len_backcast = self.len_forecast * DICT_BACKCAST[__name_backcast]
+    __train_x, __train_y, __train_dict_max = NBeatsDatasetMaker.makeDataset(self.data_train, __len_backcast, self.len_forecast, self.list_data_name, self.device, _normalize=True)
+    __eval_x, __eval_y, __eval_dict_max = NBeatsDatasetMaker.makeDataset(self.data_eval, __len_backcast, self.len_forecast, self.list_data_name, self.device, _normalize=True)
+    __train_x_t = torch.tensor(__train_x, dtype=torch.float).to(self.device)
+    __train_y_t = torch.tensor(__train_y, dtype=torch.float).to(self.device)
+    __eval_x_t = torch.tensor(__eval_x, dtype=torch.float).to(self.device)
+    __eval_y_t = torch.tensor(__eval_y, dtype=torch.float).to(self.device)
+    __net, __optimizer = self.getNet(self.len_forecast, __len_backcast)
+    for __epoch in range(DICT_EPOCH[__name_epoch]):
+      self.trainEpoch(__epoch, __train_x_t, __train_y_t, __net, __optimizer, __name_backcast, __name_epoch, __name_loss, _batch_size=1024)
+    self.evaluation(__eval_x_t, __eval_y_t, __net, __optimizer, __name_backcast, __name_epoch, __name_loss)
+
+  def makeQueueJob(self, _list_epoch, _list_backcast, _list_loss):
+    for __name_epoch in _list_epoch:
+      for __name_backcast in _list_backcast:        
+        for __name_loss in _list_loss:
+          __job = (__name_epoch, __name_backcast, __name_loss)
+          self.queue_job.put(__job)
+
+  def trainJob(self, _proc_count):
+    __list_processes = []
+    for _ in range(self.queue_job.qsize()):
+      for __ in range(_proc_count):
+        __process_job = Process(target=self.trainByjobQueue, args=(self.queue_job, ))
+        __list_processes.append(__process_job)
+        __process_job.start()
+      for __processed in __list_processes:
+        __processed.join()
+
+  def train(self, _data_train, _data_eval, _list_data_name, _len_forecast, _proc_count=3, _batch_size=1024, _name_ensemble_set=NAME_ENSEMBLE_SET_SMALL):
+    self.model_path = definitions.getTrainedModelPath(self.tag, _name_ensemble_set)
     __list_epoch = DICT_ENSEMBLE[_name_ensemble_set][NAME_ENSEMBLE_EPOCH]
     __list_loss = DICT_ENSEMBLE[_name_ensemble_set][NAME_ENSEMBLE_LOSS]
     __list_backcast = DICT_ENSEMBLE[_name_ensemble_set][NAME_ENSEMBLE_BACKCAST]
-  
-    for __name_epoch in __list_epoch:  
-      for __name_backcast in __list_backcast:
-        __len_backcast = _len_forecast * DICT_BACKCAST[__name_backcast]        
-        __train_x, __train_y, __train_dict_max = NBeatsDatasetMaker.makeDataset(_data_train, __len_backcast, _len_forecast, _list_data_name, self.device, _normalize=True)
-        __eval_x, __eval_y, __eval_dict_max = NBeatsDatasetMaker.makeDataset(_data_eval, __len_backcast, _len_forecast, _list_data_name, self.device, _normalize=True)
-        __train_x_t = torch.tensor(__train_x, dtype=torch.float).to(self.device)
-        __train_y_t = torch.tensor(__train_y, dtype=torch.float).to(self.device)
-        __eval_x_t = torch.tensor(__eval_x, dtype=torch.float).to(self.device)
-        __eval_y_t = torch.tensor(__eval_y, dtype=torch.float).to(self.device)
-        for __name_loss in __list_loss:
-          __net, __optimizer = self.getNet(_len_forecast, __len_backcast)
-          for __epoch in range(DICT_EPOCH[__name_epoch]):
-            __train_step = self.train_epoch(__epoch, __train_x_t, __train_y_t, __net, __optimizer, __name_backcast, __name_epoch, __name_loss, _batch_size)
-            if __train_step > DICT_EPOCH[__name_epoch]:
-              break
-          self.evaluation(__eval_x_t, __eval_y_t, __net, __optimizer, __name_backcast, __name_epoch, __name_loss)
+    self.data_train = _data_train
+    self.data_eval = _data_eval
+    self.list_data_name = _list_data_name
+    self.len_forecast = _len_forecast
+
+    self.makeQueueJob(__list_epoch, __list_backcast, __list_loss)
+    self.trainJob(_proc_count)
+    # for __name_epoch in __list_epoch:  
+    #   for __name_backcast in __list_backcast:
+    #     __len_backcast = _len_forecast * DICT_BACKCAST[__name_backcast]
+    #     __train_x, __train_y, __train_dict_max = NBeatsDatasetMaker.makeDataset(_data_train, __len_backcast, _len_forecast, _list_data_name, self.device, _normalize=True)
+    #     __eval_x, __eval_y, __eval_dict_max = NBeatsDatasetMaker.makeDataset(_data_eval, __len_backcast, _len_forecast, _list_data_name, self.device, _normalize=True)
+    #     __train_x_t = torch.tensor(__train_x, dtype=torch.float).to(self.device)
+    #     __train_y_t = torch.tensor(__train_y, dtype=torch.float).to(self.device)
+    #     __eval_x_t = torch.tensor(__eval_x, dtype=torch.float).to(self.device)
+    #     __eval_y_t = torch.tensor(__eval_y, dtype=torch.float).to(self.device)
+    #     for __name_loss in __list_loss:
+    #       __net, __optimizer = self.getNet(_len_forecast, __len_backcast)
+    #       for __epoch in range(DICT_EPOCH[__name_epoch]):
+    #         self.train_epoch(__epoch, __train_x_t, __train_y_t, __net, __optimizer, __name_backcast, __name_epoch, __name_loss, _batch_size)
+    #       self.evaluation(__eval_x_t, __eval_y_t, __net, __optimizer, __name_backcast, __name_epoch, __name_loss)
 
   def predict(self, _x, _len_forecast, _name_ensemble_set=NAME_ENSEMBLE_SET_SMALL, _choice_function=np.median):    
     __path_model = definitions.getTrainedModelPath(self.tag, _name_ensemble_set)

@@ -46,7 +46,7 @@ class NBeatsNet(nn.Module):
         self.thetas_dim = thetas_dims
         self.parameters = []
         self.device = device
-        print(f'| N-Beats')
+        # print(f'| N-Beats')
         for stack_id in range(len(self.stack_types)):
             self.stacks.append(self.create_stack(stack_id))
         self.parameters = nn.ParameterList(self.parameters)
@@ -54,7 +54,7 @@ class NBeatsNet(nn.Module):
 
     def create_stack(self, stack_id):
         stack_type = self.stack_types[stack_id]
-        print(f'| --  Stack {stack_type.title()} (#{stack_id}) (share_weights_in_stack={self.share_weights_in_stack})')
+        # print(f'| --  Stack {stack_type.title()} (#{stack_id}) (share_weights_in_stack={self.share_weights_in_stack})')
         blocks = []
         for block_id in range(self.nb_blocks_per_stack[stack_id]):
             block_init = NBeatsNet.select_block(stack_type)
@@ -64,7 +64,7 @@ class NBeatsNet(nn.Module):
                 block = block_init(self.hidden_layer_units[stack_id], self.thetas_dim[stack_id],
                                    self.device, self.backcast_length, self.forecast_length, self.nb_harmonics)
                 self.parameters.extend(block.parameters())
-            print(f'     | -- {block}')
+            # print(f'     | -- {block}')
             blocks.append(block)
         return blocks
 
