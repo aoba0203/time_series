@@ -8,6 +8,7 @@ import glob
 
 import torch
 from torch import optim
+from torch.optim import lr_scheduler
 from torch._C import dtype
 from torch.nn import functional as F
 from torch.utils.data import DataLoader, TensorDataset
@@ -175,8 +176,9 @@ class NBeatsTrainer:
       share_weights_in_stack=False,
       )
     __optimizer = optim.Adam(__net.parameters())
+    scheduler = lr_scheduler.ExponentialLR(__optimizer, gamma= 0.999)    
     __net.to(self.device)
-    return __net, __optimizer
+    return __net, __optimizer, scheduler
   
   def evaluation(self, _x, _y, _net, _optimizer, _name_backcast=NAME_BACKCAST_3H, _name_epoch=NAME_EPOCH_5K, _name_loss=NAME_LOSS_MAPE, _print_plot=False):
     with torch.no_grad():
@@ -229,9 +231,10 @@ class NBeatsTrainer:
         __train_x, __train_y, __train_dict_max = NBeatsDatasetMaker.makeDataset(_data_train, __len_backcast, _len_forecast, _list_data_name, self.device, _normalize=True)
         __eval_x, __eval_y, __eval_dict_max = NBeatsDatasetMaker.makeDataset(_data_eval, __len_backcast, _len_forecast, _list_data_name, self.device, _normalize=True)        
         for __name_loss in __list_loss:
-          __net, __optimizer = self.getNet(_len_forecast, __len_backcast)
+          __net, __optimizer, __scheduler = self.getNet(_len_forecast, __len_backcast)
           for __epoch in range(DICT_EPOCH[__name_epoch]):
             __train_step = self.train_epoch(__epoch, __train_x, __train_y, __net, __optimizer, __name_backcast, __name_epoch, __name_loss, _batch_size)
+            __scheduler.step()
             if __train_step > DICT_EPOCH[__name_epoch]:
               break
           self.evaluation(__eval_x, __eval_y, __net, __optimizer, __name_backcast, __name_epoch, __name_loss)
@@ -241,9 +244,10 @@ class NBeatsTrainer:
     __len_backcast = _len_forecast * DICT_BACKCAST[__name_backcast]        
     __train_x, __train_y, __train_dict_max = NBeatsDatasetMaker.makeDataset(_data_train, __len_backcast, _len_forecast, _list_data_name, self.device, _normalize=True)
     __eval_x, __eval_y, __eval_dict_max = NBeatsDatasetMaker.makeDataset(_data_eval, __len_backcast, _len_forecast, _list_data_name, self.device, _normalize=True)    
-    __net, __optimizer = self.getNet(_len_forecast, __len_backcast)
+    __net, __optimizer, __scheduler = self.getNet(_len_forecast, __len_backcast)
     for __epoch in range(DICT_EPOCH[__name_epoch]):
       __train_step = self.train_epoch(__epoch, __train_x, __train_y, __net, __optimizer, __name_backcast, __name_epoch, __name_loss, _batch_size)
+      __scheduler.step()
       if __train_step > DICT_EPOCH[__name_epoch]:
         break
       self.evaluation(__eval_x, __eval_y, __net, __optimizer, __name_backcast, __name_epoch, __name_loss)
@@ -264,7 +268,7 @@ class NBeatsTrainer:
       __len_backcast = _len_forecast * DICT_BACKCAST[_name_backcast]
       _x = _x[:__len_backcast]
       __x_t = torch.tensor(_x, dtype=torch.float).to(self.device)      
-      __net, __optimizer = self.getNet(_len_forecast, __len_backcast)      
+      __net, __optimizer, __scheduler = self.getNet(_len_forecast, __len_backcast)      
       __train_epoch = self.load(__net, __optimizer, _name_backcast, _name_epoch, _name_loss)
       __net.eval()
       __backcast, __forecast = __net(__x_t)
