@@ -254,7 +254,7 @@ class NBeatsTrainer:
       if __train_step > DICT_EPOCH[__name_epoch]:
         break
       __print_plot = False
-      if __epoch % 100 == 0:
+      if __epoch % 10 == 0:
         __print_plot = True
       self.evaluation(__eval_x, __eval_y, __net, __optimizer, __name_backcast, __name_epoch, __name_loss, _print_plot=__print_plot)
 
