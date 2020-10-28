@@ -95,18 +95,21 @@ class NBeatsTrainer:
     plt.plot(*args, **kwargs)
     plt.scatter(*args, **kwargs)
 
-  def printPlot(self, _x, _y, _forecast):
-    __len_backcast = len(_x)
-    __len_forecast = len(_forecast)
+  def printPlot(self, _x, _y, _forecast):    
     __subplots = [221, 222, 223, 224]
     plt.figure(1)
     for __plot_id, __idx in enumerate(np.random.choice(range(len(_x)), size=4, replace=False)):
-      __plot_x, __plot_y, __plot_forecast = _x[__idx], _y[__idx], _forecast[__idx]
+      __plot_x, __plot_y, __plot_forecast = _x[__idx].reshape([-1, 1]).cpu().detach().numpy(), _y[__idx].cpu().detach().numpy(), _forecast[__idx].cpu().detach().numpy()
+      __len_backcast = len(__plot_x)
+      __len_forecast = len(__plot_forecast)
       plt.subplot(__subplots[__plot_id])
       plt.grid()
-      self.makePlotScatter(range(0, __len_backcast), __plot_x, color='b')
-      self.makePlotScatter(range(__len_backcast, __len_backcast + __len_forecast), __plot_y, color='g')
-      self.makePlotScatter(range(__len_backcast, __len_backcast + __len_forecast), __plot_forecast, color='r')
+      plt.plot(np.arange(0, __len_backcast), __plot_x, color='b')
+      plt.plot(np.arange(__len_backcast-1, __len_backcast + __len_forecast-1), __plot_y, color='g')
+      plt.plot(np.arange(__len_backcast-1, __len_backcast + __len_forecast-1), __plot_forecast, color='r')
+#       self.makePlotScatter(np.arange(0, __len_backcast), __plot_x, color='b')
+#       self.makePlotScatter(np.arange(__len_backcast, __len_backcast + __len_forecast), __plot_y, color='g')
+#       self.makePlotScatter(np.arange(__len_backcast, __len_backcast + __len_forecast), __plot_forecast, color='r')
     plt.show()
 
   def loadFromFile(self, _path_model_file, _net, _optimizer):
@@ -250,7 +253,10 @@ class NBeatsTrainer:
       __scheduler.step()
       if __train_step > DICT_EPOCH[__name_epoch]:
         break
-      self.evaluation(__eval_x, __eval_y, __net, __optimizer, __name_backcast, __name_epoch, __name_loss)
+      __print_plot = False
+      if __epoch % 100 == 0:
+        __print_plot = True
+      self.evaluation(__eval_x, __eval_y, __net, __optimizer, __name_backcast, __name_epoch, __name_loss, _print_plot=__print_plot)
 
   def predict_ensemble(self, _x, _len_forecast, _name_ensemble_set=NAME_ENSEMBLE_SET_SMALL, _choice_function=np.median):    
     __path_model = definitions.getTrainedModelPath(self.tag, _name_ensemble_set)
