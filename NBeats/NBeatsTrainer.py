@@ -86,6 +86,7 @@ class NBeatsTrainer:
 
   def __init__(self, _prefix):
     self.prefix = _prefix
+    self.global_loss = 100000
     self.model_path = definitions.getTrainedModelPath(self.tag, self.prefix)
     self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -127,8 +128,10 @@ class NBeatsTrainer:
       return __epoch_step
     return 0
   
-  def save(self, _net, _optimizer, _step, _name_backcast, _name_epoch, _name_loss):
+  def save(self, _net, _optimizer, _step, _name_backcast, _name_epoch, _name_loss, _best=None):
     __model_file_name = self.getModelName(_name_backcast, _name_epoch, _name_loss)
+    if _best:
+      __model_file_name = 'best_' + __model_file_name
     __model_file_path = os.path.join(self.model_path, __model_file_name)
     torch.save({
       CHECKPOINT_NAME_STEP: _step,
@@ -185,7 +188,11 @@ class NBeatsTrainer:
       __loss = __loss_function(__forecast, _y)
       if _print_plot:
         self.printPlot(_x, _y, __forecast)
-      print(f'Evaluation - Name = {str(__model_name)}, loss = {__loss.item():.6f}')
+      # print(f'Evaluation - Name = {str(__model_name)}, loss = {__loss.item():.6f}')
+      if __loss < self.global_loss:
+        print(f'Refesh Best Model - Name = {str(__model_name)}, loss = {self.global_loss:.6f} -> {__loss.item():.6f}')
+        self.global_loss = __loss.item()
+        self.save(_net, _optimizer, 0, _name_backcast, _name_epoch, _name_loss, 'best')        
 
   def train_epoch(self, _epoch, _x, _y, _net, _optimizer, _name_backcast=NAME_BACKCAST_3H, _name_epoch=NAME_EPOCH_5K, _name_loss=NAME_LOSS_MAPE, _batch_size=256, _print_epoch=100, _shuffle=True, _save=True):
     __train_step = self.load(_net, _optimizer, _name_backcast, _name_epoch, _name_loss)
@@ -201,8 +208,8 @@ class NBeatsTrainer:
       __loss.backward()
       _optimizer.step()
       __train_step += 1      
-      # if __train_step % _print_epoch == 0:
-      #   print(f'Train - Step = {str(__train_step).zfill(6)}, loss({_name_loss}) = {__loss.item():.6f}')
+      if __train_step % _print_epoch == 0:
+        print(f'Train - Step = {str(__train_step).zfill(6)}, loss({_name_loss}) = {__loss.item():.6f}')
       del __loss, __forecast, __x, __y
     if _save:
       with torch.no_grad():
@@ -211,6 +218,7 @@ class NBeatsTrainer:
 
   def train(self, _data_train, _data_eval, _list_data_name, _len_forecast, _batch_size=1024, _name_ensemble_set=NAME_ENSEMBLE_SET_SMALL):
     # self.model_path = definitions.getTrainedModelPath(self.tag, _name_ensemble_set)
+    self.global_loss = 100000
     __list_epoch = DICT_ENSEMBLE[_name_ensemble_set][NAME_ENSEMBLE_EPOCH]
     __list_loss = DICT_ENSEMBLE[_name_ensemble_set][NAME_ENSEMBLE_LOSS]
     __list_backcast = DICT_ENSEMBLE[_name_ensemble_set][NAME_ENSEMBLE_BACKCAST]
@@ -219,23 +227,31 @@ class NBeatsTrainer:
       for __name_backcast in __list_backcast:
         __len_backcast = _len_forecast * DICT_BACKCAST[__name_backcast]        
         __train_x, __train_y, __train_dict_max = NBeatsDatasetMaker.makeDataset(_data_train, __len_backcast, _len_forecast, _list_data_name, self.device, _normalize=True)
-        __eval_x, __eval_y, __eval_dict_max = NBeatsDatasetMaker.makeDataset(_data_eval, __len_backcast, _len_forecast, _list_data_name, self.device, _normalize=True)
-        __train_x_t = torch.tensor(__train_x, dtype=torch.float).to(self.device)
-        __train_y_t = torch.tensor(__train_y, dtype=torch.float).to(self.device)
-        __eval_x_t = torch.tensor(__eval_x, dtype=torch.float).to(self.device)
-        __eval_y_t = torch.tensor(__eval_y, dtype=torch.float).to(self.device)
+        __eval_x, __eval_y, __eval_dict_max = NBeatsDatasetMaker.makeDataset(_data_eval, __len_backcast, _len_forecast, _list_data_name, self.device, _normalize=True)        
         for __name_loss in __list_loss:
           __net, __optimizer = self.getNet(_len_forecast, __len_backcast)
           for __epoch in range(DICT_EPOCH[__name_epoch]):
-            __train_step = self.train_epoch(__epoch, __train_x_t, __train_y_t, __net, __optimizer, __name_backcast, __name_epoch, __name_loss, _batch_size)
+            __train_step = self.train_epoch(__epoch, __train_x, __train_y, __net, __optimizer, __name_backcast, __name_epoch, __name_loss, _batch_size)
             if __train_step > DICT_EPOCH[__name_epoch]:
               break
-          self.evaluation(__eval_x_t, __eval_y_t, __net, __optimizer, __name_backcast, __name_epoch, __name_loss)
+          self.evaluation(__eval_x, __eval_y, __net, __optimizer, __name_backcast, __name_epoch, __name_loss)
+
+  def train_one(self, _data_train, _data_eval, _list_data_name, _len_forecast, __name_backcast=NAME_BACKCAST_7H, __name_epoch=NAME_EPOCH_15K, __name_loss=NAME_LOSS_MSE, _batch_size=1024):
+    self.global_loss = 100000
+    __len_backcast = _len_forecast * DICT_BACKCAST[__name_backcast]        
+    __train_x, __train_y, __train_dict_max = NBeatsDatasetMaker.makeDataset(_data_train, __len_backcast, _len_forecast, _list_data_name, self.device, _normalize=True)
+    __eval_x, __eval_y, __eval_dict_max = NBeatsDatasetMaker.makeDataset(_data_eval, __len_backcast, _len_forecast, _list_data_name, self.device, _normalize=True)    
+    __net, __optimizer = self.getNet(_len_forecast, __len_backcast)
+    for __epoch in range(DICT_EPOCH[__name_epoch]):
+      __train_step = self.train_epoch(__epoch, __train_x, __train_y, __net, __optimizer, __name_backcast, __name_epoch, __name_loss, _batch_size)
+      if __train_step > DICT_EPOCH[__name_epoch]:
+        break
+      self.evaluation(__eval_x, __eval_y, __net, __optimizer, __name_backcast, __name_epoch, __name_loss)
 
   def predict_ensemble(self, _x, _len_forecast, _name_ensemble_set=NAME_ENSEMBLE_SET_SMALL, _choice_function=np.median):    
     __path_model = definitions.getTrainedModelPath(self.tag, _name_ensemble_set)
     __list_predict = []
-    for __path_model in glob.glob(__path_model + '*'):
+    for __path_model in glob.glob(__path_model + '/*'):
       __name_iterate = os.path.basename(__path_model).split('_')[1]
       __name_backcast = os.path.basename(__path_model).split('_')[2]
       __name_loss = os.path.basename(__path_model).split('_')[3]
@@ -245,11 +261,12 @@ class NBeatsTrainer:
 
   def predict(self, _x, _len_forecast, _name_backcast=NAME_BACKCAST_3H, _name_epoch=NAME_EPOCH_5K, _name_loss=NAME_LOSS_MAPE):
     with torch.no_grad():
-      __x_t = torch.tensor(_x, dtype=torch.float).to(self.device)
       __len_backcast = _len_forecast * DICT_BACKCAST[_name_backcast]
+      _x = _x[:__len_backcast]
+      __x_t = torch.tensor(_x, dtype=torch.float).to(self.device)      
       __net, __optimizer = self.getNet(_len_forecast, __len_backcast)      
       __train_epoch = self.load(__net, __optimizer, _name_backcast, _name_epoch, _name_loss)
       __net.eval()
       __backcast, __forecast = __net(__x_t)
-      return __forecast
+      return __forecast.numpy()
     
