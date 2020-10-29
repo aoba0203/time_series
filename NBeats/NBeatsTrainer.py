@@ -231,8 +231,8 @@ class NBeatsTrainer:
     for __name_epoch in __list_epoch:  
       for __name_backcast in __list_backcast:
         __len_backcast = _len_forecast * DICT_BACKCAST[__name_backcast]        
-        __train_x, __train_y, __train_dict_max = NBeatsDatasetMaker.makeDataset(_data_train, __len_backcast, _len_forecast, _list_data_name, self.device, _normalize=True)
-        __eval_x, __eval_y, __eval_dict_max = NBeatsDatasetMaker.makeDataset(_data_eval, __len_backcast, _len_forecast, _list_data_name, self.device, _normalize=True)        
+        __train_x, __train_y, __train_idx = NBeatsDatasetMaker.makeDataset(_data_train, __len_backcast, _len_forecast, _list_data_name, self.device)
+        __eval_x, __eval_y, __eval_idx = NBeatsDatasetMaker.makeDataset(_data_eval, __len_backcast, _len_forecast, _list_data_name, self.device)        
         for __name_loss in __list_loss:
           __net, __optimizer, __scheduler = self.getNet(_len_forecast, __len_backcast)
           for __epoch in range(DICT_EPOCH[__name_epoch]):
@@ -245,8 +245,8 @@ class NBeatsTrainer:
   def train_one(self, _data_train, _data_eval, _list_data_name, _len_forecast, __name_backcast=NAME_BACKCAST_7H, __name_epoch=NAME_EPOCH_15K, __name_loss=NAME_LOSS_MSE, _batch_size=1024):
     self.global_loss = 100000
     __len_backcast = _len_forecast * DICT_BACKCAST[__name_backcast]        
-    __train_x, __train_y, __train_dict_max = NBeatsDatasetMaker.makeDataset(_data_train, __len_backcast, _len_forecast, _list_data_name, self.device, _normalize=True)
-    __eval_x, __eval_y, __eval_dict_max = NBeatsDatasetMaker.makeDataset(_data_eval, __len_backcast, _len_forecast, _list_data_name, self.device, _normalize=True)    
+    __train_x, __train_y, __train_idx = NBeatsDatasetMaker.makeDataset(_data_train, __len_backcast, _len_forecast, _list_data_name, self.device)
+    __eval_x, __eval_y, __eval_idx= NBeatsDatasetMaker.makeDataset(_data_eval, __len_backcast, _len_forecast, _list_data_name, self.device)    
     __net, __optimizer, __scheduler = self.getNet(_len_forecast, __len_backcast)
     for __epoch in range(DICT_EPOCH[__name_epoch]):
       __train_step = self.train_epoch(__epoch, __train_x, __train_y, __net, __optimizer, __name_backcast, __name_epoch, __name_loss, _batch_size)
