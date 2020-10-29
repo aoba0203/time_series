@@ -179,7 +179,7 @@ class NBeatsTrainer:
       share_weights_in_stack=False,
       )
     __optimizer = optim.Adam(__net.parameters())
-    scheduler = lr_scheduler.ExponentialLR(__optimizer, gamma= 0.999)    
+    scheduler = lr_scheduler.ExponentialLR(__optimizer, gamma= 0.99)    
     __net.to(self.device)
     return __net, __optimizer, scheduler
   
@@ -213,9 +213,9 @@ class NBeatsTrainer:
       __loss.backward()
       _optimizer.step()
       __train_step += 1      
-      if __train_step % _print_epoch == 0:
-        print(f'Train - Step = {str(__train_step).zfill(6)}, loss({_name_loss}) = {__loss.item():.6f}')
-      del __loss, __forecast, __x, __y
+    if __train_step % _print_epoch == 0:
+      print(f'Train - Step = {str(__train_step).zfill(6)}, loss({_name_loss}) = {__loss.item():.6f}')
+      # del __loss, __forecast, __x, __y
     if _save:
       with torch.no_grad():
         self.save(_net, _optimizer, __train_step, _name_backcast, _name_epoch, _name_loss)        
