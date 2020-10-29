@@ -13,7 +13,7 @@ def __checkDataShape(_data):
   else:
     raise Exception('Array should be of [n x 1] or [m x n x 1] shape')
 
-def __makeTrainDataset(_data, _len_backcast, _len_forecast, _normalize):
+def __makeTrainDataset(_data, _len_backcast, _len_forecast):
   __list_x = []
   __list_y = []
   _data = np.array(np.reshape(_data, [-1,]), dtype='float')    
