@@ -19,7 +19,7 @@ def __makeTrainDataset(_data, _len_backcast, _len_forecast):
   _data = np.array(np.reshape(_data, [-1,]), dtype='float')    
   _data = _data[~np.isnan(_data)]
   if (len(_data) < _len_backcast + _len_forecast):
-    return __list_x, __list_y, 0.0001  
+    return __list_x, __list_y
   for idx in range(len(_data) - (_len_backcast + _len_forecast)):
     if sum(_data[idx : idx+_len_backcast] != 0) == 0:
       continue
@@ -27,14 +27,14 @@ def __makeTrainDataset(_data, _len_backcast, _len_forecast):
     __list_y.append(_data[idx+_len_backcast : idx + (_len_backcast + _len_forecast)])
   return __list_x, __list_y
 
-def makeDataset(_data, _len_backcast, _len_forecast, _list_data_name, _device):
+def makeDataset(_data, _len_backcast, _len_forecast, _device):
   __name_data_type = __checkDataShape(_data)
   __list_dataset_x = []
   __list_dataset_y = []
   __list_index = []
   if __name_data_type == NAME_DATA_TYPE_3D:
     for __idx, __data_sub in enumerate(_data):
-      __list_x, __list_y, __num_max = __makeTrainDataset(__data_sub, _len_backcast, _len_forecast)
+      __list_x, __list_y = __makeTrainDataset(__data_sub, _len_backcast, _len_forecast)
       if len(__list_x) == 0:
         continue
       __list_dataset_x.extend(__list_x)
@@ -42,5 +42,5 @@ def makeDataset(_data, _len_backcast, _len_forecast, _list_data_name, _device):
       for _ in __list_x:
         __list_index.append(__idx)
   elif __name_data_type == NAME_DATA_TYPE_2D:
-    __list_dataset_x, __list_dataset_y, __num_max = __makeTrainDataset(_data, _len_backcast, _len_forecast)
+    __list_dataset_x, __list_dataset_y = __makeTrainDataset(_data, _len_backcast, _len_forecast)
   return torch.tensor(__list_dataset_x, dtype=torch.float).to(_device), torch.tensor(__list_dataset_y, dtype=torch.float).to(_device), __list_index

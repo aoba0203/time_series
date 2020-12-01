@@ -14,7 +14,7 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader, TensorDataset
 
 from utils.operators import NAME_LOSS_MAPE, NAME_LOSS_MSE, NAME_LOSS_MASE, NAME_LOSS_PA, NAME_LOSS_RMSE
-from NBeats.NBEATS import NBeatsNet
+from NBeats.NBEATS_copy import NBeatsNet
 import definitions
 from utils import operators
 from NBeats import NBeatsDatasetMaker
@@ -148,33 +148,13 @@ class NBeatsTrainer:
       __model_file_name = 'best_' + __model_file_name
     return __model_file_name
   
-  def getNet(self, _len_forecast, _len_backcast):    
-    __list_stack = []
-    __list_block_cnt = []
-    __list_hidden_layer_units = []
-    __list_thetas_dims = []
-    for __ in range(self.cnt_generic):
-      __list_stack.append(NBeatsNet.GENERIC_BLOCK)
-      __list_hidden_layer_units.append(512)
-      __list_block_cnt.append(1)
-      __list_thetas_dims.append(20)
-    for __ in range(self.cnt_seasonal):
-      __list_stack.append(NBeatsNet.SEASONALITY_BLOCK)
-      __list_hidden_layer_units.append(2048)
-      __list_block_cnt.append(3)
-      __list_thetas_dims.append(20)
-    for __ in range(self.cnt_trend):
-      __list_stack.append(NBeatsNet.TREND_BLOCK)
-      __list_hidden_layer_units.append(256)
-      __list_block_cnt.append(4)
-      __list_thetas_dims.append(4)    
+  def getNet(self, _len_forecast, _len_backcast):        
     __net = NBeatsNet(device=self.device,
-      stack_types=__list_stack,
       forecast_length=_len_forecast,
       backcast_length=_len_backcast,
-      hidden_layer_units=__list_hidden_layer_units,
-      nb_blocks_per_stack=__list_block_cnt,
-      thetas_dims=__list_thetas_dims,
+      hidden_layer_units=512,
+      nb_blocks_per_stack=4,
+      thetas_dims=128,
       share_weights_in_stack=False,
       )
     __optimizer = optim.Adam(__net.parameters())
@@ -188,11 +168,11 @@ class NBeatsTrainer:
       __loss_function = DICT_LOSS_FUNCTION[_name_loss]
       __train_epoch = self.load(_net, _optimizer, _name_backcast, _name_epoch, _name_loss)
       _net.eval()
-      __backcast, __forecast = _net(_x)
-      __loss = __loss_function(__forecast, _y)
-      __loss_rmse = operators.calcLossRMSE(__forecast, _y)
+      __backcast, __forecast, __pred = _net(_x)
+      __loss = __loss_function(__pred, _y)
+      __loss_rmse = operators.calcLossRMSE(__pred, _y)
       if _print_plot:
-        self.printPlot(_x, _y, __forecast)
+        self.printPlot(_x, _y, __pred)
         print(f'Evaluation - Name = {str(__model_name)}, loss = {__loss.item():.6f}, RMSE = {__loss_rmse.item():.6f}')
       if __loss < self.global_loss:
         print(f'Refesh Best Model - Name = {str(__model_name)}, loss = {self.global_loss:.6f} -> {__loss.item():.6f}')
@@ -200,7 +180,7 @@ class NBeatsTrainer:
         self.save(_net, _optimizer, 0, _name_backcast, _name_epoch, _name_loss, 'best')        
 
   def train_epoch(self, _epoch, _x, _y, _net, _optimizer, _name_backcast=NAME_BACKCAST_3H, _name_epoch=NAME_EPOCH_5K, _name_loss=NAME_LOSS_MAPE, _batch_size=256, _print_epoch=100, _shuffle=True, _save=True):
-    __train_step = self.load(_net, _optimizer, _name_backcast, _name_epoch, _name_loss, _is_best=True)
+    __train_step = self.load(_net, _optimizer, _name_backcast, _name_epoch, _name_loss, _is_best=False)
     __loss_function = DICT_LOSS_FUNCTION[_name_loss]
     __datasets = TensorDataset(_x, _y)
     __data_loader = DataLoader(__datasets, batch_size=_batch_size, shuffle=_shuffle)    
@@ -208,13 +188,20 @@ class NBeatsTrainer:
     _net.train()
     for __x, __y in __data_loader:
       _optimizer.zero_grad()
-      __backcast, __forecast = _net(__x)
-      __loss = __loss_function(__forecast, __y)      
-      __loss.backward()
+      __backcast, __forecast, __pred = _net(__x)
+      # print(__pred.size(), __pred.size()[1], __pred)
+      for idx in range(__pred.size()[1]):
+        __loss = __loss_function(__pred[:, idx], __y[:, idx])
+        if idx == (__pred.size()[1]-1):
+          __loss.backward()
+        else:
+          __loss.backward(retain_graph=True)
+      __loss = __loss_function(__pred, __y)
+      # __loss.backward()
       _optimizer.step()
       __train_step += 1      
-    if __train_step % _print_epoch == 0:
-      print(f'Train - Step = {str(__train_step).zfill(6)}, loss({_name_loss}) = {__loss.item():.6f}')
+    # if __train_step % _print_epoch == 0:
+    print(f'Train - Step = {str(__train_step).zfill(6)}, loss({_name_loss}) = {__loss.item():.6f}')
       # del __loss, __forecast, __x, __y
     if _save:
       with torch.no_grad():
@@ -300,6 +287,6 @@ class NBeatsTrainer:
       __net, __optimizer, __scheduler = self.getNet(_len_forecast, __len_backcast)      
       __train_epoch = self.load(__net, __optimizer, _name_backcast, _name_epoch, _name_loss, _is_best)
       __net.eval()
-      __backcast, __forecast = __net(__x_t)
-      return __forecast.cpu().detach().numpy()
+      __backcast, __forecast, __fore = __net(__x_t)
+      return __fore.cpu().detach().numpy()
     

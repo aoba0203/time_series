@@ -4,10 +4,14 @@ from torch.nn import functional as F
 NAME_LOSS_MAPE = 'MAPE'
 NAME_LOSS_MSE = 'MSE'
 NAME_LOSS_MASE = 'MASE' # Mean Absolute Scale Error
+NAME_LOSS_RMSE = 'RMSE'
 NAME_LOSS_PA = 'PA' # Predict Accuracy 1 - ((P - Y) / (P + Y))
 
 def calcLossMAPE(_pred, _y):
   return torch.mean(torch.abs(_pred - _y) / torch.abs(_pred))
+
+def calcLossRMSE(_pred, _y):
+  return torch.sqrt(F.mse_loss(_pred, _y))
 
 def calcLossMSE(_pred, _y):
   return F.mse_loss(_pred, _y)
