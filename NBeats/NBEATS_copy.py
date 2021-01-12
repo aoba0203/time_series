@@ -24,15 +24,15 @@ class NBeatsNet(nn.Module):
     TREND_BLOCK = 'trend'
     GENERIC_BLOCK = 'generic'
 
-    def __init__(self,
-                 device,
-                 nb_blocks_per_stack=3,
-                 forecast_length=5,
-                 backcast_length=10,
-                 thetas_dims=256,
-                 share_weights_in_stack=False,
-                 hidden_layer_units=256,
-                 nb_harmonics=None):
+    def __init__(
+            self,device,nb_blocks_per_stack=3,
+            forecast_length=5,
+            backcast_length=10,
+            thetas_dims=256,
+            share_weights_in_stack=False,
+            hidden_layer_units=256,
+            nb_harmonics=None
+            ):
         super(NBeatsNet, self).__init__()
         self.forecast_length = forecast_length
         self.backcast_length = backcast_length
@@ -59,8 +59,10 @@ class NBeatsNet(nn.Module):
             if self.share_weights_in_stack and block_id != 0:
                 block = blocks[-1]  # pick up the last one when we share weights.
             else:
-                block = block_init(self.hidden_layer_units, self.thetas_dim,
-                                   self.device, self.backcast_length + stack_id, self.forecast_length, self.nb_harmonics)
+                block = block_init(
+                    self.hidden_layer_units, self.thetas_dim,
+                    self.device, self.backcast_length + stack_id, self.forecast_length, self.nb_harmonics
+                    )
                 self.parameters.extend(block.parameters())
             # print(f'     | -- {block}')
             blocks.append(block)
@@ -92,7 +94,7 @@ class NBeatsNet(nn.Module):
                 backcast = backcast.to(self.device) - b
                 forecast = forecast.to(self.device) + f
             backcast = torch.cat([backcast, forecast], dim=1)            
-            forecast = torch.squeeze(forecast)            
+            forecast = torch.squeeze(forecast)
             predicts[:, stack_id] = forecast
         return backcast, forecast, predicts
 
@@ -123,8 +125,10 @@ def linspace(backcast_length, forecast_length):
 
 class Block(nn.Module):
 
-    def __init__(self, units, thetas_dim, device, backcast_length=10, forecast_length=5, share_thetas=False,
-                 nb_harmonics=None):
+    def __init__(
+            self, units, thetas_dim, device, backcast_length=10, forecast_length=5, 
+            share_thetas=False, nb_harmonics=None
+            ):
         super(Block, self).__init__()
         self.units = units
         self.thetas_dim = thetas_dim
@@ -148,14 +152,14 @@ class Block(nn.Module):
         x = F.relu(self.fc2(x))
         x = F.relu(self.fc3(x))
         x = F.relu(self.fc4(x))
-        x = nn.LayerNorm(x.size()[1:], elementwise_affine=False)(x)
+        # x = nn.LayerNorm(x.size()[1:], elementwise_affine=False)(x)
         return x
 
     def __str__(self):
         block_type = type(self).__name__
         return f'{block_type}(units={self.units}, thetas_dim={self.thetas_dim}, ' \
-               f'backcast_length={self.backcast_length}, forecast_length={self.forecast_length}, ' \
-               f'share_thetas={self.share_thetas}) at @{id(self)}'
+            f'backcast_length={self.backcast_length}, forecast_length={self.forecast_length}, ' \
+            f'share_thetas={self.share_thetas}) at @{id(self)}'
 
 
 class SeasonalityBlock(Block):

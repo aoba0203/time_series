@@ -18,22 +18,23 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-
 class NBeatsNet(nn.Module):
     SEASONALITY_BLOCK = 'seasonality'
     TREND_BLOCK = 'trend'
     GENERIC_BLOCK = 'generic'
 
-    def __init__(self,
-                 device,
-                 stack_types=(TREND_BLOCK, SEASONALITY_BLOCK),
-                 nb_blocks_per_stack=3,
-                 forecast_length=5,
-                 backcast_length=10,
-                 thetas_dims=(4, 8),
-                 share_weights_in_stack=False,
-                 hidden_layer_units=256,
-                 nb_harmonics=None):
+    def __init__(
+            self,
+            device,
+            stack_types=(TREND_BLOCK, SEASONALITY_BLOCK),
+            nb_blocks_per_stack=3,
+            forecast_length=5,
+            backcast_length=10,
+            thetas_dims=(4, 8),
+            share_weights_in_stack=False,
+            hidden_layer_units=256,
+            nb_harmonics=None
+        ):
         super(NBeatsNet, self).__init__()
         self.forecast_length = forecast_length
         self.backcast_length = backcast_length
@@ -61,8 +62,10 @@ class NBeatsNet(nn.Module):
             if self.share_weights_in_stack and block_id != 0:
                 block = blocks[-1]  # pick up the last one when we share weights.
             else:
-                block = block_init(self.hidden_layer_units[stack_id], self.thetas_dim[stack_id],
-                                   self.device, self.backcast_length, self.forecast_length, self.nb_harmonics)
+                block = block_init(
+                    self.hidden_layer_units[stack_id], self.thetas_dim[stack_id],
+                    self.device, self.backcast_length, self.forecast_length, self.nb_harmonics
+                )
                 self.parameters.extend(block.parameters())
             # print(f'     | -- {block}')
             blocks.append(block)
@@ -78,7 +81,7 @@ class NBeatsNet(nn.Module):
             return GenericBlock
 
     def forward(self, backcast):
-        forecast = torch.zeros(size=(backcast.size()[0], self.forecast_length,))  # maybe batch size here.
+        forecast = torch.zeros(size=(backcast.size()[0], self.forecast_length, ))  # maybe batch size here.
         for stack_id in range(len(self.stacks)):
             for block_id in range(len(self.stacks[stack_id])):
                 b, f = self.stacks[stack_id][block_id](backcast)
@@ -113,8 +116,9 @@ def linspace(backcast_length, forecast_length):
 
 class Block(nn.Module):
 
-    def __init__(self, units, thetas_dim, device, backcast_length=10, forecast_length=5, share_thetas=False,
-                 nb_harmonics=None):
+    def __init__(
+            self, units, thetas_dim, device, backcast_length=10, forecast_length=5, share_thetas=False,
+            nb_harmonics=None):
         super(Block, self).__init__()
         self.units = units
         self.thetas_dim = thetas_dim
@@ -194,5 +198,4 @@ class GenericBlock(Block):
 
         backcast = self.backcast_fc(theta_b)  # generic. 3.3.
         forecast = self.forecast_fc(theta_f)  # generic. 3.3.
-
         return backcast, forecast
